@@ -1,0 +1,43 @@
+{
+  "name": "lenny-insight-hub",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "native:rebuild": "npm rebuild better-sqlite3",
+    "native:ensure": "node scripts/ensure-native.mjs",
+    "predev": "npm run native:ensure",
+    "dev": "node node_modules/next/dist/bin/next dev --webpack",
+    "prebuild": "npm run native:ensure",
+    "build": "node node_modules/next/dist/bin/next build --webpack",
+    "prestart": "npm run native:ensure",
+    "start": "node node_modules/next/dist/bin/next start",
+    "lint": "node node_modules/eslint/bin/eslint.js .",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
+    "import:data": "node --import tsx scripts/import-data.ts",
+    "analyze:pending": "node --env-file-if-exists=.env.local --import tsx scripts/analyze-pending.ts",
+    "test": "node node_modules/vitest/vitest.mjs run"
+  },
+  "dependencies": {
+    "@tabler/icons-react": "^3.34.1",
+    "better-sqlite3": "^12.4.1",
+    "fast-xml-parser": "^5.3.0",
+    "gray-matter": "^4.0.3",
+    "next": "^16.1.6",
+    "openai": "^6.16.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "recharts": "^3.7.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.19.30",
+    "@types/react": "^19.2.10",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^16.1.6",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
