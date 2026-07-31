@@ -1,5 +1,6 @@
 import { analyzeContentItem } from "../src/lib/analysis";
 import { getDb } from "../src/lib/db";
+import { getPostgres, hasPostgresDatabase } from "../src/lib/postgres";
 
 type PendingRow = {
   id: string;
@@ -19,26 +20,46 @@ function readPositiveInteger(flag: string, fallback: number) {
   return parsed;
 }
 
+async function readPending(limit: number) {
+  if (hasPostgresDatabase()) {
+    return getPostgres().unsafe<PendingRow[]>(
+      `SELECT c.id, c.title, c.type, c.published_at, c.word_count
+       FROM content_items c
+       WHERE c.body_status <> 'missing'
+         AND NOT EXISTS (
+           SELECT 1 FROM insights i
+           WHERE i.content_item_id = c.id AND i.stale = 0
+         )
+       ORDER BY
+         CASE WHEN c.body_status = 'available' THEN 0 ELSE 1 END,
+         c.published_at DESC NULLS LAST,
+         c.id ASC
+       LIMIT $1`,
+      [limit],
+    );
+  }
+  return getDb()
+    .prepare(
+      `SELECT c.id, c.title, c.type, c.published_at, c.word_count
+       FROM content_items c
+       WHERE c.body_status <> 'missing'
+         AND NOT EXISTS (
+           SELECT 1 FROM insights i
+           WHERE i.content_item_id = c.id AND i.stale = 0
+         )
+       ORDER BY
+         CASE WHEN c.body_status = 'available' THEN 0 ELSE 1 END,
+         c.published_at DESC,
+         c.id ASC
+       LIMIT ?`,
+    )
+    .all(limit) as PendingRow[];
+}
+
 async function main() {
   const concurrency = readPositiveInteger("--concurrency", 3);
   const requestedLimit = readPositiveInteger("--limit", Number.MAX_SAFE_INTEGER);
-  const db = getDb();
-  const pending = db
-  .prepare(
-    `SELECT c.id, c.title, c.type, c.published_at, c.word_count
-     FROM content_items c
-     WHERE c.body_status <> 'missing'
-       AND NOT EXISTS (
-         SELECT 1 FROM insights i
-         WHERE i.content_item_id = c.id AND i.stale = 0
-       )
-     ORDER BY
-       CASE WHEN c.body_status = 'available' THEN 0 ELSE 1 END,
-       c.published_at DESC,
-       c.id ASC
-     LIMIT ?`,
-  )
-    .all(requestedLimit) as PendingRow[];
+  const pending = await readPending(requestedLimit);
 
   if (!pending.length) {
     console.log("没有待解读内容。");
@@ -103,7 +124,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.stack : error);
-  process.exitCode = 1;
-});
+main()
+  .catch((error) => {
+    console.error(error instanceof Error ? error.stack : error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    if (hasPostgresDatabase()) await getPostgres().end({ timeout: 10 });
+  });

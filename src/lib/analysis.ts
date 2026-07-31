@@ -3,6 +3,7 @@ import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { getContentById } from "@/lib/data";
+import { getPostgres, hasPostgresDatabase } from "@/lib/postgres";
 import type {
   ContentDetail,
   InsightCitation,
@@ -219,10 +220,19 @@ export function getAnalysisProvider(): AnalysisProvider {
   return provider;
 }
 
-function createJob(contentItemId: string | null, jobType: string) {
-  const db = getDb();
+async function createJob(contentItemId: string | null, jobType: string) {
   const id = `job_${sha256(`${jobType}:${contentItemId}:${Date.now()}`).slice(0, 20)}`;
   const now = new Date().toISOString();
+  if (hasPostgresDatabase()) {
+    await getPostgres().unsafe(
+      `INSERT INTO analysis_jobs (
+        id, content_item_id, job_type, status, attempts, created_at, updated_at
+      ) VALUES ($1, $2, $3, 'running', 0, $4, $4)`,
+      [id, contentItemId, jobType, now] as never[],
+    );
+    return id;
+  }
+  const db = getDb();
   db.prepare(
     `INSERT INTO analysis_jobs (
       id, content_item_id, job_type, status, attempts, created_at, updated_at
@@ -231,7 +241,17 @@ function createJob(contentItemId: string | null, jobType: string) {
   return id;
 }
 
-function failJob(jobId: string, error: unknown, attempts: number) {
+async function failJob(jobId: string, error: unknown, attempts: number) {
+  const message = error instanceof Error ? error.message : "未知错误";
+  const now = new Date().toISOString();
+  if (hasPostgresDatabase()) {
+    await getPostgres().unsafe(
+      `UPDATE analysis_jobs SET status = 'failed', attempts = $1,
+       error_message = $2, updated_at = $3 WHERE id = $4`,
+      [attempts, message, now, jobId] as never[],
+    );
+    return;
+  }
   getDb()
     .prepare(
       `UPDATE analysis_jobs SET status = 'failed', attempts = ?,
@@ -239,10 +259,151 @@ function failJob(jobId: string, error: unknown, attempts: number) {
     )
     .run(
       attempts,
-      error instanceof Error ? error.message : "未知错误",
-      new Date().toISOString(),
+      message,
+      now,
       jobId,
     );
+}
+
+async function updateJobAttempt(jobId: string, attempt: number) {
+  const now = new Date().toISOString();
+  if (hasPostgresDatabase()) {
+    await getPostgres().unsafe(
+      "UPDATE analysis_jobs SET attempts = $1, updated_at = $2 WHERE id = $3",
+      [attempt, now, jobId] as never[],
+    );
+    return;
+  }
+  getDb()
+    .prepare("UPDATE analysis_jobs SET attempts = ?, updated_at = ? WHERE id = ?")
+    .run(attempt, now, jobId);
+}
+
+function renderInsightMarkdown(
+  content: ContentDetail,
+  payload: InsightPayload,
+  citations: InsightCitation[],
+) {
+  const list = (values: string[]) => values.map((value) => `- ${value}`).join("\n");
+  return [
+    `# ${content.title}｜中文解读`,
+    "",
+    `> ${payload.oneLineConclusion}`,
+    "",
+    "## 为什么重要",
+    "",
+    payload.whyItMatters,
+    "",
+    "## 核心观点",
+    "",
+    ...payload.corePoints.flatMap((point, index) => [
+      `### ${index + 1}. ${point.title}`,
+      "",
+      point.explanation,
+      "",
+      `引用：${point.citationIds.join(", ")}`,
+      "",
+    ]),
+    "## 论证链",
+    "",
+    list(payload.argumentChain),
+    "",
+    "## 案例与数据",
+    "",
+    list(payload.casesAndData.map((item) => `${item.statement}（${item.citationIds.join(", ")}）`)),
+    "",
+    "## 可执行应用",
+    "",
+    list(payload.applications),
+    "",
+    "## 我的判断",
+    "",
+    payload.myTake,
+    "",
+    "## 适用边界",
+    "",
+    list(payload.boundaries),
+    "",
+    "## 开放问题",
+    "",
+    list(payload.openQuestions),
+    "",
+    "## 原文引用",
+    "",
+    ...citations.flatMap((citation) => [
+      `### ${citation.chunkId} · ${citation.label}`,
+      "",
+      `> ${citation.quote.replaceAll("\n", "\n> ")}`,
+      "",
+    ]),
+  ].join("\n");
+}
+
+async function saveContentInsight(args: {
+  insightId: string;
+  content: ContentDetail;
+  payload: InsightPayload;
+  citations: InsightCitation[];
+  model: string;
+  provider: string;
+  jobId: string;
+  now: string;
+}) {
+  const rawMarkdown = renderInsightMarkdown(args.content, args.payload, args.citations);
+  const importHash = sha256(rawMarkdown);
+  if (hasPostgresDatabase()) {
+    await getPostgres().begin(async (sql) => {
+      await sql.unsafe("UPDATE insights SET stale = 1 WHERE content_item_id = $1", [args.content.id]);
+      await sql.unsafe(
+        `INSERT INTO insights (
+          id, content_item_id, payload_json, citations_json, source_hash,
+          model, provider, stale, created_at, raw_markdown, import_hash
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10)`,
+        [
+          args.insightId,
+          args.content.id,
+          JSON.stringify(args.payload),
+          JSON.stringify(args.citations),
+          args.content.contentHash,
+          args.model,
+          args.provider,
+          args.now,
+          rawMarkdown,
+          importHash,
+        ],
+      );
+      await sql.unsafe(
+        "UPDATE analysis_jobs SET status = 'success', updated_at = $1 WHERE id = $2",
+        [args.now, args.jobId],
+      );
+    });
+    return;
+  }
+  const db = getDb();
+  const transaction = db.transaction(() => {
+    db.prepare("UPDATE insights SET stale = 1 WHERE content_item_id = ?").run(args.content.id);
+    db.prepare(
+      `INSERT INTO insights (
+        id, content_item_id, payload_json, citations_json, source_hash,
+        model, provider, stale, created_at, raw_markdown, import_hash
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+    ).run(
+      args.insightId,
+      args.content.id,
+      JSON.stringify(args.payload),
+      JSON.stringify(args.citations),
+      args.content.contentHash,
+      args.model,
+      args.provider,
+      args.now,
+      rawMarkdown,
+      importHash,
+    );
+    db.prepare(
+      "UPDATE analysis_jobs SET status = 'success', updated_at = ? WHERE id = ?",
+    ).run(args.now, args.jobId);
+  });
+  transaction();
 }
 
 export async function analyzeContentItem(contentId: string) {
@@ -256,13 +417,11 @@ export async function analyzeContentItem(contentId: string) {
     );
   }
 
-  const jobId = createJob(contentId, "content_analysis");
+  const jobId = await createJob(contentId, "content_analysis");
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
-      getDb()
-        .prepare("UPDATE analysis_jobs SET attempts = ?, updated_at = ? WHERE id = ?")
-        .run(attempt, new Date().toISOString(), jobId);
+      await updateJobAttempt(jobId, attempt);
       const payload = await analysisProvider.analyzeContent(content);
       const citedIds = new Set([
         ...payload.corePoints.flatMap((point) => point.citationIds),
@@ -284,33 +443,20 @@ export async function analyzeContentItem(contentId: string) {
         }));
       const insightId = `ins_${sha256(`${contentId}:${Date.now()}`).slice(0, 20)}`;
       const now = new Date().toISOString();
-      const db = getDb();
-      const transaction = db.transaction(() => {
-        db.prepare("UPDATE insights SET stale = 1 WHERE content_item_id = ?").run(contentId);
-        db.prepare(
-          `INSERT INTO insights (
-            id, content_item_id, payload_json, citations_json, source_hash,
-            model, provider, stale, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-        ).run(
-          insightId,
-          contentId,
-          JSON.stringify(payload),
-          JSON.stringify(citations),
-          content.contentHash,
-          analysisProvider.model,
-          analysisProvider.provider,
-          now,
-        );
-        db.prepare(
-          "UPDATE analysis_jobs SET status = 'success', updated_at = ? WHERE id = ?",
-        ).run(now, jobId);
+      await saveContentInsight({
+        insightId,
+        content,
+        payload,
+        citations,
+        model: analysisProvider.model,
+        provider: analysisProvider.provider,
+        jobId,
+        now,
       });
-      transaction();
       return getContentById(contentId);
     } catch (error) {
       lastError = error;
-      if (attempt === 2) failJob(jobId, error, attempt);
+      if (attempt === 2) await failJob(jobId, error, attempt);
     }
   }
   throw lastError;
@@ -362,7 +508,7 @@ export async function generateWeeklyDigest(date = new Date()) {
     })
     .join("\n\n---\n\n");
 
-  const jobId = createJob(null, "weekly_digest");
+  const jobId = await createJob(null, "weekly_digest");
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -394,7 +540,7 @@ export async function generateWeeklyDigest(date = new Date()) {
       return { id, weekStart, weekEnd, payload, model: analysisProvider.model, createdAt: now };
     } catch (error) {
       lastError = error;
-      if (attempt === 2) failJob(jobId, error, attempt);
+      if (attempt === 2) await failJob(jobId, error, attempt);
     }
   }
   throw lastError;
