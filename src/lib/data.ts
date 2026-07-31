@@ -10,6 +10,7 @@ import type {
   SyncRun,
   WeeklyDigest,
 } from "@/lib/types";
+import { hasPostgresDatabase } from "@/lib/postgres";
 
 type SqlRow = Record<string, unknown>;
 
@@ -304,6 +305,10 @@ async function semanticSearch(query: ContentQuery): Promise<ContentSearchResult>
 }
 
 export async function getContent(query: ContentQuery): Promise<ContentSearchResult> {
+  if (hasPostgresDatabase()) {
+    const { getPostgresContent } = await import("@/lib/postgres-data");
+    return getPostgresContent(query);
+  }
   await ensureImported();
   if (query.mode === "semantic") return semanticSearch(query);
 
@@ -350,6 +355,10 @@ function parseInsight(row: SqlRow | undefined): StoredInsight | null {
 }
 
 export async function getContentById(id: string): Promise<ContentDetail | null> {
+  if (hasPostgresDatabase()) {
+    const { getPostgresContentById } = await import("@/lib/postgres-data");
+    return getPostgresContentById(id);
+  }
   await ensureImported();
   const db = getDb();
   const row = db
@@ -390,6 +399,10 @@ export async function getContentById(id: string): Promise<ContentDetail | null> 
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
+  if (hasPostgresDatabase()) {
+    const { getPostgresDashboardStats } = await import("@/lib/postgres-data");
+    return getPostgresDashboardStats();
+  }
   await ensureImported();
   const db = getDb();
   const totals = db
@@ -503,6 +516,10 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 }
 
 export async function getSyncRuns(limit = 20): Promise<SyncRun[]> {
+  if (hasPostgresDatabase()) {
+    const { getPostgresSyncRuns } = await import("@/lib/postgres-data");
+    return getPostgresSyncRuns(limit);
+  }
   await ensureImported();
   return getDb()
     .prepare("SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT ?")
@@ -525,6 +542,10 @@ export async function getSyncRuns(limit = 20): Promise<SyncRun[]> {
 }
 
 export async function getWeeklyDigests(limit = 12): Promise<WeeklyDigest[]> {
+  if (hasPostgresDatabase()) {
+    const { getPostgresWeeklyDigests } = await import("@/lib/postgres-data");
+    return getPostgresWeeklyDigests(limit);
+  }
   await ensureImported();
   return getDb()
     .prepare("SELECT * FROM weekly_digests ORDER BY week_start DESC LIMIT ?")

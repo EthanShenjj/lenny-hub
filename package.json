@@ -15,6 +15,7 @@
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "import:data": "node --import tsx scripts/import-data.ts",
     "import:interpretations": "node --import tsx scripts/import-interpretations.ts",
+    "migrate:supabase": "node --env-file-if-exists=.env.local --import tsx scripts/migrate-to-supabase.ts --replace",
     "analyze:pending": "node --env-file-if-exists=.env.local --import tsx scripts/analyze-pending.ts",
     "test": "node node_modules/vitest/vitest.mjs run"
   },
@@ -25,6 +26,7 @@
     "gray-matter": "^4.0.3",
     "next": "^16.1.6",
     "openai": "^6.16.0",
+    "postgres": "^3.4.9",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "recharts": "^3.7.0",

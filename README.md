@@ -80,3 +80,11 @@ npm run build
 补足短标题条目。导入是幂等的；完整 Markdown 会保存在 `insights.raw_markdown`，
 同时解析成详情页使用的结构化解读。也可以通过
 `LENNY_INTERPRETATIONS_DIR` 指定目录。
+
+配置 `SUPABASE_DATABASE_URL` 后，应用会自动使用 Supabase PostgreSQL；未配置时仍使用本地 SQLite。首次把本地完整数据迁移到 Supabase：
+
+```bash
+npm run migrate:supabase
+```
+
+迁移脚本会以本地 `data/lenny-hub.db` 为准，替换目标 Supabase 项目中的 Lenny Hub 表数据。

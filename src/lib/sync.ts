@@ -3,6 +3,7 @@ import { getDb, ensureImported } from "@/lib/db";
 import { normalizeTitle, sha256 } from "@/lib/utils";
 import { upsertCandidate, type ImportCandidate } from "@/lib/importer";
 import type { SyncRun } from "@/lib/types";
+import { hasPostgresDatabase } from "@/lib/postgres";
 
 const SOURCES = {
   newsletterRss: "https://www.lennysnewsletter.com/feed",
@@ -169,6 +170,9 @@ function rowToSyncRun(row: Record<string, unknown>): SyncRun {
 export async function runSync(
   trigger: SyncRun["trigger"] = "manual",
 ): Promise<SyncRun> {
+  if (hasPostgresDatabase()) {
+    throw new Error("Supabase 生产模式暂不支持在线抓取；请在本地同步后重新迁移。 ");
+  }
   await ensureImported();
   const db = getDb();
   const id = `sync_${sha256(`${trigger}:${Date.now()}`).slice(0, 20)}`;
@@ -250,6 +254,9 @@ export async function runSync(
 }
 
 export async function runMaintenance() {
+  if (hasPostgresDatabase()) {
+    return { ran: false, reason: "Supabase 生产模式不执行本地 SQLite 自动同步" };
+  }
   await ensureImported();
   if (process.env.LENNY_AUTO_SYNC === "false") {
     return { ran: false, reason: "LENNY_AUTO_SYNC=false" };

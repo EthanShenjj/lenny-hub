@@ -160,6 +160,7 @@ export function hasImportedContent() {
 }
 
 export async function ensureImported() {
+  if (process.env.SUPABASE_DATABASE_URL) return;
   if (hasImportedContent()) return;
   const { importAllData } = await import("@/lib/importer");
   importAllData();

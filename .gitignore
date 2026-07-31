@@ -6,3 +6,5 @@ data/*.db
 data/*.db-*
 coverage/
 npm-debug.log*
+.vercel
+.env*
