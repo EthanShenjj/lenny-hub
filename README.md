@@ -21,6 +21,7 @@
 cd lenny-hub-app
 npm install
 npm run import:data
+npm run import:interpretations -- /absolute/path/to/lenny中文解读
 cp .env.example .env.local
 npm run dev
 ```
@@ -73,3 +74,9 @@ npm run build
 ```
 
 数据库默认写入 `data/lenny-hub.db`，已加入 `.gitignore`。删除数据库后重新运行 `npm run import:data` 可从只读 Markdown 重建。
+
+中文解读导入会扫描给定目录下的 `解读/newsletter/*.md` 与
+`解读/podcast/*.md`，优先按标题和日期关联原文，并用 transcript 的 video ID
+补足短标题条目。导入是幂等的；完整 Markdown 会保存在 `insights.raw_markdown`，
+同时解析成详情页使用的结构化解读。也可以通过
+`LENNY_INTERPRETATIONS_DIR` 指定目录。

@@ -124,6 +124,23 @@ function migrate(db: Database.Database) {
       tokenize = 'unicode61 remove_diacritics 2'
     );
   `);
+
+  const insightColumns = db.pragma("table_info(insights)") as Array<{ name: string }>;
+  const hasInsightColumn = (name: string) =>
+    insightColumns.some((column) => column.name === name);
+  if (!hasInsightColumn("raw_markdown")) {
+    db.exec("ALTER TABLE insights ADD COLUMN raw_markdown TEXT");
+  }
+  if (!hasInsightColumn("source_path")) {
+    db.exec("ALTER TABLE insights ADD COLUMN source_path TEXT");
+  }
+  if (!hasInsightColumn("import_hash")) {
+    db.exec("ALTER TABLE insights ADD COLUMN import_hash TEXT");
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_insights_source_path
+      ON insights(source_path) WHERE source_path IS NOT NULL;
+  `);
 }
 
 export function getDb() {

@@ -14,6 +14,7 @@
     "lint": "node node_modules/eslint/bin/eslint.js .",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "import:data": "node --import tsx scripts/import-data.ts",
+    "import:interpretations": "node --import tsx scripts/import-interpretations.ts",
     "analyze:pending": "node --env-file-if-exists=.env.local --import tsx scripts/analyze-pending.ts",
     "test": "node node_modules/vitest/vitest.mjs run"
   },
