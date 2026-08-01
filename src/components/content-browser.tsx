@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import * as Select from "@radix-ui/react-select";
 import {
   IconArrowRight,
   IconBook2,
   IconCalendar,
+  IconCheck,
+  IconChevronDown,
+  IconChevronUp,
   IconClock,
   IconMicrophone2,
   IconSearch,
@@ -321,16 +325,54 @@ function FilterSelect({
   onChange: (value: string) => void;
   options: string[][];
 }) {
+  const emptyValue = `__empty-${label}`;
+  const selectedValue = value || emptyValue;
+
   return (
-    <label className="filter-field">
-      <span className="sr-only">{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map(([optionValue, optionLabel]) => (
-          <option value={optionValue} key={`${label}-${optionValue}`}>
-            {optionLabel}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="filter-field">
+      <Select.Root
+        value={selectedValue}
+        onValueChange={(nextValue) => onChange(nextValue === emptyValue ? "" : nextValue)}
+      >
+        <Select.Trigger className="filter-select-trigger" aria-label={label}>
+          <Select.Value />
+          <Select.Icon className="filter-select-icon">
+            <IconChevronDown size={16} stroke={1.8} />
+          </Select.Icon>
+        </Select.Trigger>
+        <Select.Portal>
+          <Select.Content
+            className="filter-select-content"
+            position="popper"
+            sideOffset={6}
+            collisionPadding={12}
+          >
+            <Select.ScrollUpButton className="filter-select-scroll-button">
+              <IconChevronUp size={16} />
+            </Select.ScrollUpButton>
+            <Select.Viewport className="filter-select-viewport">
+              {options.map(([optionValue, optionLabel]) => {
+                const itemValue = optionValue || emptyValue;
+                return (
+                  <Select.Item
+                    className="filter-select-item"
+                    value={itemValue}
+                    key={`${label}-${itemValue}`}
+                  >
+                    <Select.ItemText>{optionLabel}</Select.ItemText>
+                    <Select.ItemIndicator className="filter-select-indicator">
+                      <IconCheck size={16} stroke={2.2} />
+                    </Select.ItemIndicator>
+                  </Select.Item>
+                );
+              })}
+            </Select.Viewport>
+            <Select.ScrollDownButton className="filter-select-scroll-button">
+              <IconChevronDown size={16} />
+            </Select.ScrollDownButton>
+          </Select.Content>
+        </Select.Portal>
+      </Select.Root>
+    </div>
   );
 }

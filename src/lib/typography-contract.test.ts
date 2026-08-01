@@ -20,7 +20,8 @@ describe("desktop typography", () => {
     expect(fontSizeFor(".page-description")).toBeGreaterThanOrEqual(16);
     expect(fontSizeFor(".search-box input")).toBeGreaterThanOrEqual(15);
     expect(fontSizeFor(".segmented-control button")).toBeGreaterThanOrEqual(14);
-    expect(fontSizeFor(".filter-field select")).toBeGreaterThanOrEqual(14);
+    expect(fontSizeFor(".filter-select-trigger")).toBeGreaterThanOrEqual(14);
+    expect(fontSizeFor(".filter-select-item")).toBeGreaterThanOrEqual(14);
     expect(fontSizeFor(".results-toolbar")).toBeGreaterThanOrEqual(13);
     expect(fontSizeFor(".content-card h2")).toBeGreaterThanOrEqual(17);
     expect(fontSizeFor(".content-description")).toBeGreaterThanOrEqual(14);
