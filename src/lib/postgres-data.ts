@@ -68,6 +68,20 @@ const insightStatusSql = `
   END
 `;
 
+const contentSummaryColumns = `
+  c.id,
+  c.type,
+  c.title,
+  c.guest,
+  c.published_at,
+  c.source_url,
+  c.description,
+  c.tags_json,
+  c.word_count,
+  c.body_status,
+  c.imported_source
+`;
+
 function buildContentQuery(query: ContentQuery, count = false) {
   const values: unknown[] = [];
   const where: string[] = [];
@@ -108,7 +122,7 @@ function buildContentQuery(query: ContentQuery, count = false) {
   const limit = add(pageSize);
   const offset = add((page - 1) * pageSize);
   return {
-    text: `SELECT c.*, ${insightStatusSql} AS insight_status
+    text: `SELECT ${contentSummaryColumns}, ${insightStatusSql} AS insight_status
       FROM content_items c ${whereSql}
       ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${offset}`,
     values,
